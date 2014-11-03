@@ -1,0 +1,27 @@
+package cqrs
+
+import akka.actor.{ PoisonPill, ActorSystem }
+import cqrs.domain.orders.{ Order, OrderCommandHandler, Orders }
+import akka.contrib.pattern.{ ClusterSharding, ClusterSingletonManager, ClusterSingletonProxy }
+
+trait DomainActors {
+  implicit def system: ActorSystem
+  system.actorOf(
+    ClusterSingletonManager.props(Orders.props, "orders", PoisonPill, None),
+    "singleton"
+  )
+
+  lazy val orders = system.actorOf(
+    ClusterSingletonProxy.props(s"/user/singleton/orders", None),
+    "ordersProxy"
+  )
+
+  // register the Order entry type
+  val orderRegion = ClusterSharding(system).start(
+    typeName = Order.shardName,
+    entryProps = Some(Order.props(100)),
+    idExtractor = OrderCommandHandler.idExtractor,
+    shardResolver = OrderCommandHandler.shardResolver)
+
+  lazy val orderCommandHandler = system.actorOf(OrderCommandHandler.props(orders, orderRegion), "OrderCommandHandler")
+}
