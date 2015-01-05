@@ -11,7 +11,7 @@ object OrderCommandHandler {
 
   case class Command(orderId: String, cmd: Order.Command)
 
-  case class UnknownOrderException(msg: String) extends Exception
+  case class UnknownOrderException(msg: String) extends Exception(msg)
 
   val idExtractor: ShardRegion.IdExtractor = {
     case Command(orderId, orderCommand) ⇒ (orderId, orderCommand)

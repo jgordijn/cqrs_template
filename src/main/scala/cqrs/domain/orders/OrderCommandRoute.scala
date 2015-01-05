@@ -35,7 +35,7 @@ trait OrderCommandRoute extends HttpService with SprayJsonSupport with UnMarshal
       case Success(x) ⇒
         complete(StatusCodes.NoContent)
       case Failure(ex @ DuplicateOrderKeyException(id)) ⇒
-        complete(StatusCodes.BadRequest, ex.msg)
+        complete(StatusCodes.BadRequest, ex.getMessage)
       case Failure(ex) ⇒
         complete(StatusCodes.InternalServerError, s"An error occurred: ${ex.getMessage}")
     }

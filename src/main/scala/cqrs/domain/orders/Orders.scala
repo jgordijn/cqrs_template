@@ -13,12 +13,9 @@ object Orders {
   sealed trait Event
   case class OrderCreated(orderId: String, username: String) extends Event
 
-  sealed trait FunctionalException extends Exception {
-    def msg: String
-  }
-  case class DuplicateOrderKeyException(orderId: String) extends FunctionalException {
-    val msg = s"There already is an order with id: $orderId"
-  }
+  sealed class FunctionalException(message: String) extends Exception(message)
+
+  case class DuplicateOrderKeyException(orderId: String) extends FunctionalException(s"There already is an order with id: $orderId")
 
   val persistenceId: String = "orders"
 

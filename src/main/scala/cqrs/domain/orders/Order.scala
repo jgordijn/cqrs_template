@@ -39,7 +39,6 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
       log.debug(s"UPDATE: $persistenceId")
       orderPrice += quantity * pricePerItem
     case OrderSubmitted ⇒
-      sender() ! Status.Success(())
       context become submitted
   }
 
@@ -67,6 +66,9 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
       sender() ! Status.Failure(MaxOrderPriceReached(orderPrice, maxOrderPrice))
     case SubmitOrder if orderPrice > 0 ⇒
       log.info(s"Order submitted {}", orderId)
-      persist(OrderSubmitted) { updateState }
+      persist(OrderSubmitted) { event =>
+        sender() ! Status.Success(())
+        updateState (event)
+      }
   }
 }
