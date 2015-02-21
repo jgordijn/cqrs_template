@@ -6,26 +6,26 @@
 <div>
     <h2>Introduction</h2>
     <p>
-    This activator template will show how to make a CQRS (Command Query Responsibility Segregation) style application using akka-persistence and cluster sharding with an PersistentActor and PersistentView.
-    CQRS stands for Command Query Responsibility Segregation. It's a pattern that was first described by Greg Young. Basically it means that you use a different model to update information than the model you use to read information.
+    This activator template will show how to make a CQRS (Command Query Responsibility Segregation) style application using akka-persistence with PersistentActor and Persistent view and cluster sharding.
+    CQRS stands for Command Query Responsibility Segregation. It is a pattern that was first described by Greg Young. Basically it means that one uses a different model for writing/updating information than the model that is used to read information.
         There are two different kind of messages in a CQRS system:
     </p>
     <dl>
-        <dt>Commands</dt>
-        <dd>change the state of an object</dd>
-        <dt>Queries</dt>
+        <dt>Commands:</dt>
+        <dd>these change the state of an object</dd>
+        <dt>Queries:</dt>
         <dd>return results and do not change the state of an object</dd>
     </dl>
     <p>
-    Event Sourcing means that all changes to application state are stored as a sequence of events. This sequence of events can be used to query the current state of an object, and the history of an object.
-        It is also a great help for queries you did not think of when creating your application. Because all events are stored, you can query for everything imaginable with the data.
+    Event Sourcing means that all changes to application state are stored as a sequence of events. This sequence of events can be used to query the current state of an object but also the history of an object.
+        It also helps to create queries one did not think of when creating the application. Because all events are stored, one can query the event store to create all kinds of new views based on the data even at a later date.
     </p>
     <p>
     We believe that the Akka actor model is an extremely good fit for CQRS and Event sourcing. The actor works on the basis of processing a command and outputting one or many events that represent the result of processing that command.
 </p><p>
-    Akka <a href="http://doc.akka.io/docs/akka/2.3.5/common/cluster.html#cluster">cluster</a> will be used to create a distributed system.
+    Besides CQRS based on Akka persistence, Akka <a href="http://doc.akka.io/docs/akka/2.3.5/common/cluster.html#cluster">cluster</a> will be used to create a distributed system.
 </p><p>
-    In this tutorial we will present a business case which we will implement with Akka incl. clustering, CQRS and Event Sourcing.
+    In this tutorial we will present a business case that will be implemented using Akka, clustering, CQRS and Event Sourcing.
     </p>
 </div>
 
@@ -38,7 +38,7 @@
         The process flow is as follows:
         </p>
     <ol>
-        <li>A user creates an order. Client is sending a createOrderForUser command with the username and orderId</li>
+        <li>A user creates an order. Client is sending a <i>CreateOrderForUser</i> command with the username and orderId</li>
         <li>The user adds one or more order lines (products) to the order (addProductToOrder)</li>
         <li>The user finalizes the sale by submitting the order (placeOrder)</li>
     </ol>
@@ -65,7 +65,7 @@
 <div>
     <h2>Domain</h2>
     <p>
-        To perform an action in the domain, you have to send a command to it. The command will be validated and processed. This will lead to one or more events that are stored in the journal. This is the Command part of <b>C</b>QRS with Event Sourcing.
+        To perform an action in the domain, you have to send a command to it. The command will be validated and processed. This will lead to one or more events that are stored in the journal. This is the Command part of <b>C</b>QRS.
     </p>
     <p>
         In the domain we have 3 important Actors for handling the business logic. These actors are created in the <a href="#code/src/main/scala/cqrs/DomainActors.scala" class="shortcut">DomainActors</a> Trait
