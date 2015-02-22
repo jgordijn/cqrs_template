@@ -17,8 +17,8 @@
         <dd>return results and do not change the state of an object</dd>
     </dl>
     <p>
-    Event Sourcing means that all changes to application state are stored as a sequence of events. This sequence of events can be used to query the current state of an object but also the history of an object.
-        It also helps to create queries one did not think of when creating the application. Because all events are stored, one can query the event store to create all kinds of new views based on the data even at a later date.
+    Event Sourcing means that all changes to application state are stored as a sequence of events. This sequence of events can be used to query the current state of an object but also the history of an object. Event
+        sourcing allows one to create different kinds of views which one did not even think of when creating the application. Because all events are stored, one can query the event store to create these new views based on the data even at a later date.
     </p>
     <p>
     We believe that the Akka actor model is an extremely good fit for CQRS and Event sourcing. The actor works on the basis of processing a command and outputting one or many events that represent the result of processing that command.
@@ -38,9 +38,12 @@
         The process flow is as follows:
         </p>
     <ol>
-        <li>A user creates an order. Client is sending a <i>CreateOrderForUser</i> command with the username and orderId</li>
-        <li>The user adds one or more order lines (products) to the order (addProductToOrder)</li>
-        <li>The user finalizes the sale by submitting the order (placeOrder)</li>
+        <li>The user must create an order. This is done bij sending a NewOrder message via de rest client. This message is transformed into a  <i>CreateOrderForUser</i>
+            command which is subsequently processed by the OrderCommandHandler actor.  If the <i>CreateOrderForUser</i> message is lost while sending it to the
+            <a href="#code/src/main/scala/cqrs/domain/orders/Orders.scala" class="shortcut">Orders</a> actor, it is the responsibility of the client to resend the message.  Resending is
+           not an issue as it is idempotent.</li>
+        <li>The user adds one or more order lines (products) to the order via  the <i>AddItem</i> command.</li>
+        <li>The user finalizes the sale by submitting the order via the <i>SubmitOrder</i> command.</li>
     </ol>
 <p>
         Business rules:
@@ -54,7 +57,7 @@
         Admins or other user(s) (ie finance department, shipping, logistics, etc) can see what happened to the order to allow them to track the order flow.
 </p>
 <p>Implementation:<br>
-       This is implemented by a CQRS model with Clustering, as depicted below
+       This is implemented by a CQRS model with Clustering, as depicted below:
         <img src="tutorial/images/cqrs.png">
 </p>
     </p>
