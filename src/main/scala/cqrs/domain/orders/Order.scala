@@ -2,12 +2,14 @@ package cqrs.domain.orders
 
 import akka.actor.{ Status, ActorLogging, Props }
 import akka.persistence.PersistentActor
+import cqrs.domain.orders.OrderCommandHandler.UnknownOrderException
 import cqrs.settings.SettingsActor
 
 object Order {
   sealed trait Command
   case class AddItem(quantity: Int, productName: String, pricePerItem: Double) extends Command
   case object SubmitOrder extends Command
+  case object Initialize extends Command
 
   abstract class FunctionalException(msg: String) extends Exception(msg)
   case class OrderIsSubmittedException(orderId: String) extends FunctionalException(s"Cannot handle any commands. The Order is submitted: $orderId")
@@ -42,19 +44,12 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
       context become submitted
   }
 
-  def submitted: Receive = {
-    case msg ⇒
-      log.error("Order is completed. Will not process: {}", msg)
-      sender() ! Status.Failure(OrderIsSubmittedException(orderId))
+  def uninitialized : Receive = {
+    case Initialize ⇒ context become initialized
+    case _ ⇒ sender() ! Status.Failure(UnknownOrderException("unknown order"))
   }
 
-  override def receiveRecover: Receive = {
-    case event: Event ⇒
-      log.debug("Receiving recover message: {}", event)
-      updateState(event)
-  }
-
-  override def receiveCommand: Receive = {
+  def initialized : Receive = {
     case AddItem(quantity, productName, pricePerItem) if orderPrice + quantity * pricePerItem <= maxOrderPrice ⇒
       persist(ItemAdded(quantity, productName, pricePerItem)) { evt ⇒
         log.debug(s"Item Added {} to {}", persistenceId, evt)
@@ -71,4 +66,18 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
         updateState (event)
       }
   }
+
+  def submitted: Receive = {
+    case msg ⇒
+      log.error("Order is completed. Will not process: {}", msg)
+      sender() ! Status.Failure(OrderIsSubmittedException(orderId))
+  }
+
+  override def receiveRecover: Receive = {
+    case event: Event ⇒
+      log.debug("Receiving recover message: {}", event)
+      updateState(event)
+  }
+
+  override def receiveCommand: Receive = initialized
 }

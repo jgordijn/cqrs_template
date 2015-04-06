@@ -2,6 +2,8 @@ package cqrs
 package domain.orders
 
 import java.util.UUID
+import cqrs.domain.orders.OrderCommandHandler.UnknownOrderException
+
 import scala.concurrent.duration._
 import org.scalatest.{ BeforeAndAfterAll, Matchers, FlatSpecLike }
 
@@ -50,6 +52,7 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
     orderCommandHandler ! Orders.CreateOrderForUser(orderId, "trivento")
     expectMsg(Status.Success())
   }
+
   def addItemSuccesfully(quantity: Int, productName: String, pricePerItem: Double)(implicit orderId: String, orderViewProbe: TestProbe) = {
     orderCommandHandler ! OrderCommandHandler.Command(orderId, Order.AddItem(quantity, productName, pricePerItem))
     expectMsg(Status.Success())
@@ -62,10 +65,22 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
     orderViewProbe.expectNoMsg(500 millis)
   }
 
-  def submitSuccesfully()(implicit orderId: String, orderViewProbe: TestProbe) = {
+  def submitSuccessfully()(implicit orderId: String, orderViewProbe: TestProbe) = {
     orderCommandHandler ! OrderCommandHandler.Command(orderId, Order.SubmitOrder)
     expectMsg(Status.Success())
     orderViewProbe.expectMsg(Order.OrderSubmitted)
+  }
+
+  def addItemToUnknownOrder(quantity: Int, productName: String, pricePerItem: Double)(implicit orderId: String, orderViewProbe: TestProbe): Unit = {
+    orderCommandHandler ! OrderCommandHandler.Command(orderId, Order.AddItem(quantity, productName, pricePerItem))
+    expectMsg(Status.Failure(UnknownOrderException("unknown order"))) // TODO change message
+    orderViewProbe.expectNoMsg(500 millis)
+  }
+
+  def submitToUnknownOrder()(implicit orderId: String, orderViewProbe: TestProbe) = {
+    orderCommandHandler ! OrderCommandHandler.Command(orderId, Order.SubmitOrder)
+    expectMsg(Status.Failure(UnknownOrderException("unknown order"))) // TODO change message
+    orderViewProbe.expectNoMsg(500 millis)
   }
 
   "The Domain" should "handle the happy flow, adding items and submitting the order with price < 100" in {
@@ -76,7 +91,7 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
     createOrderForUser()
     addItemSuccesfully(1, "T-Shirt", 12.50)
     addItemSuccesfully(2, "Sweater", 27.95)
-    submitSuccesfully()
+    submitSuccessfully()
   }
 
   it should "reply with a failure when adding an item exceeds the max price" in {
@@ -88,7 +103,7 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
     createOrderForUser()
     addItemSuccesfully(1, "T-Shirt", 99.00)
     addItemFailed(1, "Sweater", 10.00, 99.00, 100.00)
-    submitSuccesfully()
+    submitSuccessfully()
 
   }
 
@@ -100,7 +115,7 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
 
     createOrderForUser()
     addItemSuccesfully(1, "T-Shirt", 100.00)
-    submitSuccesfully()
+    submitSuccessfully()
   }
 
   it should "accept an order with multiple products with an exact total price of 100 dollar" in {
@@ -111,7 +126,16 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
     createOrderForUser()
     addItemSuccesfully(2, "T-Shirt", 12.50)
     addItemSuccesfully(1, "Sweater", 75.00)
-    submitSuccesfully()
+    submitSuccessfully()
+  }
+
+  it should "throw exception if an attempt to send command to an order that doesn't exist" in {
+    implicit val orderId = UUID.randomUUID().toString
+    implicit val orderViewProbe = TestProbe()
+    system.actorOf(Props(new TestOrderView(orderId, orderViewProbe.ref)))
+
+    addItemToUnknownOrder(1, "Boots", 50.00)
+    submitToUnknownOrder()
   }
 
 }
