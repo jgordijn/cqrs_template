@@ -19,13 +19,13 @@ object Orders {
 
   val persistenceId: String = "orders"
 
-  def props: Props =
-    Props(new Orders)
+  def props(orderRegion: ActorRef): Props =
+    Props(new Orders(orderRegion))
 
   def actorName(orderId: String): String = s"order-$orderId"
 }
 
-class Orders extends PersistentActor with SettingsActor with ActorLogging {
+class Orders(orderRegion: ActorRef) extends PersistentActor with SettingsActor with ActorLogging {
   import cqrs.domain.orders.Orders._
 
   override val persistenceId: String = Orders.persistenceId
@@ -42,10 +42,12 @@ class Orders extends PersistentActor with SettingsActor with ActorLogging {
       log.debug("Creating Order")
       persist(OrderCreated(orderId, username)) { evt ⇒
         updateState(evt)
+        orderRegion ! OrderCommandHandler.Command(orderId, Order.InitializeOrder)
         sender() ! Status.Success()
       }
     case CreateOrderForUser(orderId, username) ⇒
       log.debug("Order already created")
+      orderRegion ! OrderCommandHandler.Command(orderId, Order.InitializeOrder)
       sender() ! Status.Success()
   }
 

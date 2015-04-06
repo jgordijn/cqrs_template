@@ -20,7 +20,8 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
 
   override def afterAll(): Unit = system.shutdown()
 
-  lazy val orders = system.actorOf(Orders.props, "Orders")
+  lazy val orders = system.actorOf(Orders.props(orderRegion), "Orders")
+
   // Stub out the orderRegion with a local implementation
   val orderRegion = actor {
     new Act {
@@ -42,6 +43,7 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
     override def viewId: String = "test"
 
     override def receive: Receive = {
+      case Order.OrderInitialized ⇒
       case msg ⇒
         log.debug(s"Test view received: $msg")
         probe ! msg
@@ -73,13 +75,13 @@ class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with I
 
   def addItemToUnknownOrder(quantity: Int, productName: String, pricePerItem: Double)(implicit orderId: String, orderViewProbe: TestProbe): Unit = {
     orderCommandHandler ! OrderCommandHandler.Command(orderId, Order.AddItem(quantity, productName, pricePerItem))
-    expectMsg(Status.Failure(UnknownOrderException("unknown order"))) // TODO change message
+    expectMsg(Status.Failure(UnknownOrderException("unknown order")))
     orderViewProbe.expectNoMsg(500 millis)
   }
 
   def submitToUnknownOrder()(implicit orderId: String, orderViewProbe: TestProbe) = {
     orderCommandHandler ! OrderCommandHandler.Command(orderId, Order.SubmitOrder)
-    expectMsg(Status.Failure(UnknownOrderException("unknown order"))) // TODO change message
+    expectMsg(Status.Failure(UnknownOrderException("unknown order")))
     orderViewProbe.expectNoMsg(500 millis)
   }
 

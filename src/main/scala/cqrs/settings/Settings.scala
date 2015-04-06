@@ -1,7 +1,7 @@
 package cqrs.settings
 
 import akka.actor.{ Actor, ExtensionKey, Extension, ExtendedActorSystem }
-import scala.concurrent.duration.{ Duration, FiniteDuration }
+import scala.concurrent.duration._
 import java.util.concurrent.TimeUnit
 
 object Settings extends ExtensionKey[Settings]
@@ -12,6 +12,7 @@ class Settings(system: ExtendedActorSystem) extends Extension {
   val config = system.settings.config getConfig ("cqrs")
 
   val maxOrderPrice: Double = config getDouble "maxOrderPrice"
+  val uninitializedOrderLifeTime: Duration = config getInt "uninitializedOrderLifeTime" seconds
 }
 
 /*

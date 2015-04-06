@@ -16,7 +16,8 @@ class SystemTest extends TestKit(ActorSystem("systemtest")) with ImplicitSender 
 
   override def afterAll(): Unit = system.shutdown()
 
-  lazy val orders = system.actorOf(Orders.props, "Orders")
+  lazy val orders = system.actorOf(Orders.props(orderRegion), "Orders")
+
   // Stub out the orderRegion with a local implementation
   val orderRegion = actor {
     new Act {

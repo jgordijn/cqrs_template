@@ -6,15 +6,6 @@ import akka.contrib.pattern.{ ClusterSharding, ClusterSingletonManager, ClusterS
 
 trait DomainActors {
   implicit def system: ActorSystem
-  system.actorOf(
-    ClusterSingletonManager.props(Orders.props, "orders", PoisonPill, None),
-    "singleton"
-  )
-
-  lazy val orders = system.actorOf(
-    ClusterSingletonProxy.props(s"/user/singleton/orders", None),
-    "ordersProxy"
-  )
 
   // register the Order entry type
   val orderRegion = ClusterSharding(system).start(
@@ -22,6 +13,16 @@ trait DomainActors {
     entryProps = Some(Order.props(100)),
     idExtractor = OrderCommandHandler.idExtractor,
     shardResolver = OrderCommandHandler.shardResolver)
+
+  system.actorOf(
+    ClusterSingletonManager.props(Orders.props(orderRegion), "orders", PoisonPill, None),
+    "singleton"
+  )
+
+  lazy val orders = system.actorOf(
+    ClusterSingletonProxy.props(s"/user/singleton/orders", None),
+    "ordersProxy"
+  )
 
   lazy val orderCommandHandler = system.actorOf(OrderCommandHandler.props(orders, orderRegion), "OrderCommandHandler")
 }

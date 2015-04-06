@@ -1,6 +1,6 @@
 package cqrs.domain.orders
 
-import akka.actor.{ Status, ActorLogging, Props }
+import akka.actor.{ReceiveTimeout, Status, ActorLogging, Props}
 import akka.persistence.PersistentActor
 import cqrs.domain.orders.OrderCommandHandler.UnknownOrderException
 import cqrs.settings.SettingsActor
@@ -9,7 +9,7 @@ object Order {
   sealed trait Command
   case class AddItem(quantity: Int, productName: String, pricePerItem: Double) extends Command
   case object SubmitOrder extends Command
-  case object Initialize extends Command
+  case object InitializeOrder extends Command
 
   abstract class FunctionalException(msg: String) extends Exception(msg)
   case class OrderIsSubmittedException(orderId: String) extends FunctionalException(s"Cannot handle any commands. The Order is submitted: $orderId")
@@ -18,6 +18,7 @@ object Order {
   sealed trait Event
   case class ItemAdded(quantity: Int, productName: String, pricePerItem: Double) extends Event
   case object OrderSubmitted extends Event
+  case object OrderInitialized extends Event
 
   def persistenceId(orderId: String): String = s"order_$orderId"
 
@@ -36,7 +37,11 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
 
   var orderPrice: Double = 0
 
+  context.setReceiveTimeout(settings.uninitializedOrderLifeTime)
+
   def updateState(event: Event): Unit = event match {
+    case OrderInitialized ⇒
+      context become initialized
     case ItemAdded(quantity, productName, pricePerItem) ⇒
       log.debug(s"UPDATE: $persistenceId")
       orderPrice += quantity * pricePerItem
@@ -45,7 +50,12 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
   }
 
   def uninitialized : Receive = {
-    case Initialize ⇒ context become initialized
+    case InitializeOrder ⇒
+      persist(OrderInitialized) { evt ⇒
+        log.debug(s"Order initialized {}", persistenceId)
+        updateState(evt)
+      }
+    case ReceiveTimeout ⇒ context stop self
     case _ ⇒ sender() ! Status.Failure(UnknownOrderException("unknown order"))
   }
 
@@ -65,9 +75,11 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
         sender() ! Status.Success(())
         updateState (event)
       }
+    case ReceiveTimeout ⇒ // ignore
   }
 
   def submitted: Receive = {
+    case ReceiveTimeout ⇒ // ignore
     case msg ⇒
       log.error("Order is completed. Will not process: {}", msg)
       sender() ! Status.Failure(OrderIsSubmittedException(orderId))
@@ -79,5 +91,5 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
       updateState(event)
   }
 
-  override def receiveCommand: Receive = initialized
+  override def receiveCommand: Receive = uninitialized
 }
