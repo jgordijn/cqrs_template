@@ -10,7 +10,7 @@ object Order {
   sealed trait Command
   case class AddItem(quantity: Int, productName: String, pricePerItem: Double) extends Command
   case object SubmitOrder extends Command
-  case object InitializeOrder extends Command
+  case class InitializeOrder(username: String) extends Command
   case object StopOrder extends Command
 
   abstract class FunctionalException(msg: String) extends Exception(msg)
@@ -52,10 +52,11 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
   }
 
   def uninitialized : Receive = {
-    case InitializeOrder ⇒
+    case InitializeOrder(username) ⇒
       persist(OrderInitialized) { evt ⇒
         log.debug(s"Order initialized {}", persistenceId)
         updateState(evt)
+        sender ! Orders.InitializedOrderAck(orderId, username)
       }
     case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = StopOrder)
     case StopOrder ⇒ context stop self

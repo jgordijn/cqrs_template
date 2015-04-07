@@ -2,7 +2,6 @@ package cqrs
 package domain.orders
 
 import java.util.UUID
-import cqrs.domain.orders.OrderCommandHandler.UnknownOrderException
 
 import scala.concurrent.duration._
 import org.scalatest.{ BeforeAndAfterAll, Matchers, FlatSpecLike }
@@ -15,6 +14,8 @@ import akka.testkit.{ TestProbe, ImplicitSender, TestKit }
 import Order.MaxOrderPriceReached
 import read.OrdersView
 import settings.Settings
+
+import OrderCommandHandler.UnknownOrderException
 
 class DomainTest extends TestKit(ActorSystem("domain")) with FlatSpecLike with ImplicitSender with Matchers with BeforeAndAfterAll {
 

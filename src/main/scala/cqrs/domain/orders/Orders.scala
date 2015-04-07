@@ -4,11 +4,10 @@ import akka.actor.{ Status, ActorLogging, ActorRef, Props }
 import akka.persistence.PersistentActor
 import cqrs.settings.SettingsActor
 
-import scala.util.{ Failure, Success }
-
 object Orders {
   case class Get(orderId: String)
   case class CreateOrderForUser(id: String, username: String)
+  case class InitializedOrderAck(id: String, username: String)
 
   sealed trait Event
   case class OrderCreated(orderId: String, username: String) extends Event
@@ -40,15 +39,14 @@ class Orders(orderRegion: ActorRef) extends PersistentActor with SettingsActor w
   override def receiveCommand: Receive = {
     case CreateOrderForUser(orderId, username) if !existingOrders.contains(orderId) ⇒
       log.debug("Creating Order")
-      persist(OrderCreated(orderId, username)) { evt ⇒
-        updateState(evt)
-        orderRegion ! OrderCommandHandler.Command(orderId, Order.InitializeOrder)
-        sender() ! Status.Success()
-      }
+      orderRegion ! OrderCommandHandler.Command(orderId, Order.InitializeOrder(username))
+      sender() ! Status.Success()
     case CreateOrderForUser(orderId, username) ⇒
       log.debug("Order already created")
-      orderRegion ! OrderCommandHandler.Command(orderId, Order.InitializeOrder)
-      sender() ! Status.Success()
+      sender() ! Status.Failure(DuplicateOrderKeyException(orderId))
+    case InitializedOrderAck(orderId, username) ⇒
+      log.debug("Registering initialized order")
+      persist(OrderCreated(orderId, username))(updateState)
   }
 
   override def receiveRecover: Receive = {
