@@ -4,11 +4,10 @@ import akka.actor.{ Status, ActorLogging, ActorRef, Props }
 import akka.persistence.PersistentActor
 import cqrs.settings.SettingsActor
 
-import scala.util.{ Failure, Success }
-
 object Orders {
   case class Get(orderId: String)
   case class CreateOrderForUser(id: String, username: String)
+  case class InitializedOrderAck(id: String, username: String)
 
   sealed trait Event
   case class OrderCreated(orderId: String, username: String) extends Event
@@ -19,13 +18,13 @@ object Orders {
 
   val persistenceId: String = "orders"
 
-  def props: Props =
-    Props(new Orders)
+  def props(orderRegion: ActorRef): Props =
+    Props(new Orders(orderRegion))
 
   def actorName(orderId: String): String = s"order-$orderId"
 }
 
-class Orders extends PersistentActor with SettingsActor with ActorLogging {
+class Orders(orderRegion: ActorRef) extends PersistentActor with SettingsActor with ActorLogging {
   import cqrs.domain.orders.Orders._
 
   override val persistenceId: String = Orders.persistenceId
@@ -40,13 +39,14 @@ class Orders extends PersistentActor with SettingsActor with ActorLogging {
   override def receiveCommand: Receive = {
     case CreateOrderForUser(orderId, username) if !existingOrders.contains(orderId) ⇒
       log.debug("Creating Order")
-      persist(OrderCreated(orderId, username)) { evt ⇒
-        updateState(evt)
-        sender() ! Status.Success()
-      }
+      orderRegion ! OrderCommandHandler.Command(orderId, Order.InitializeOrder(username))
+      sender() ! Status.Success()
     case CreateOrderForUser(orderId, username) ⇒
       log.debug("Order already created")
-      sender() ! Status.Success()
+      sender() ! Status.Failure(DuplicateOrderKeyException(orderId))
+    case InitializedOrderAck(orderId, username) ⇒
+      log.debug("Registering initialized order")
+      persist(OrderCreated(orderId, username))(updateState)
   }
 
   override def receiveRecover: Receive = {

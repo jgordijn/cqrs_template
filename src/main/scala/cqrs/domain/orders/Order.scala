@@ -1,13 +1,17 @@
 package cqrs.domain.orders
 
-import akka.actor.{ Status, ActorLogging, Props }
+import akka.actor.{ReceiveTimeout, Status, ActorLogging, Props}
+import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.PersistentActor
+import OrderCommandHandler.UnknownOrderException
 import cqrs.settings.SettingsActor
 
 object Order {
   sealed trait Command
   case class AddItem(quantity: Int, productName: String, pricePerItem: Double) extends Command
   case object SubmitOrder extends Command
+  case class InitializeOrder(username: String) extends Command
+  case object StopOrder extends Command
 
   abstract class FunctionalException(msg: String) extends Exception(msg)
   case class OrderIsSubmittedException(orderId: String) extends FunctionalException(s"Cannot handle any commands. The Order is submitted: $orderId")
@@ -16,6 +20,7 @@ object Order {
   sealed trait Event
   case class ItemAdded(quantity: Int, productName: String, pricePerItem: Double) extends Event
   case object OrderSubmitted extends Event
+  case object OrderInitialized extends Event
 
   def persistenceId(orderId: String): String = s"order_$orderId"
 
@@ -34,7 +39,11 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
 
   var orderPrice: Double = 0
 
+  context.setReceiveTimeout(settings.orderReceiveTimeout)
+
   def updateState(event: Event): Unit = event match {
+    case OrderInitialized ⇒
+      context become initialized
     case ItemAdded(quantity, productName, pricePerItem) ⇒
       log.debug(s"UPDATE: $persistenceId")
       orderPrice += quantity * pricePerItem
@@ -42,19 +51,19 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
       context become submitted
   }
 
-  def submitted: Receive = {
-    case msg ⇒
-      log.error("Order is completed. Will not process: {}", msg)
-      sender() ! Status.Failure(OrderIsSubmittedException(orderId))
+  def uninitialized : Receive = {
+    case InitializeOrder(username) ⇒
+      persist(OrderInitialized) { evt ⇒
+        log.debug(s"Order initialized {}", persistenceId)
+        updateState(evt)
+        sender ! Orders.InitializedOrderAck(orderId, username)
+      }
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = StopOrder)
+    case StopOrder ⇒ context stop self
+    case _ ⇒ sender() ! Status.Failure(UnknownOrderException("unknown order"))
   }
 
-  override def receiveRecover: Receive = {
-    case event: Event ⇒
-      log.debug("Receiving recover message: {}", event)
-      updateState(event)
-  }
-
-  override def receiveCommand: Receive = {
+  def initialized : Receive = {
     case AddItem(quantity, productName, pricePerItem) if orderPrice + quantity * pricePerItem <= maxOrderPrice ⇒
       persist(ItemAdded(quantity, productName, pricePerItem)) { evt ⇒
         log.debug(s"Item Added {} to {}", persistenceId, evt)
@@ -70,5 +79,23 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
         sender() ! Status.Success(())
         updateState (event)
       }
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = StopOrder)
+    case StopOrder ⇒ context stop self
   }
+
+  def submitted: Receive = {
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = StopOrder)
+    case StopOrder ⇒ context stop self
+    case msg ⇒
+      log.error("Order is completed. Will not process: {}", msg)
+      sender() ! Status.Failure(OrderIsSubmittedException(orderId))
+  }
+
+  override def receiveRecover: Receive = {
+    case event: Event ⇒
+      log.debug("Receiving recover message: {}", event)
+      updateState(event)
+  }
+
+  override def receiveCommand: Receive = uninitialized
 }
