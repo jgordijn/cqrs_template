@@ -1,8 +1,9 @@
 package cqrs.domain.orders
 
 import akka.actor.{ReceiveTimeout, Status, ActorLogging, Props}
+import akka.contrib.pattern.ShardRegion.Passivate
 import akka.persistence.PersistentActor
-import cqrs.domain.orders.OrderCommandHandler.UnknownOrderException
+import OrderCommandHandler.UnknownOrderException
 import cqrs.settings.SettingsActor
 
 object Order {
@@ -10,6 +11,7 @@ object Order {
   case class AddItem(quantity: Int, productName: String, pricePerItem: Double) extends Command
   case object SubmitOrder extends Command
   case object InitializeOrder extends Command
+  case object StopOrder extends Command
 
   abstract class FunctionalException(msg: String) extends Exception(msg)
   case class OrderIsSubmittedException(orderId: String) extends FunctionalException(s"Cannot handle any commands. The Order is submitted: $orderId")
@@ -37,7 +39,7 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
 
   var orderPrice: Double = 0
 
-  context.setReceiveTimeout(settings.uninitializedOrderLifeTime)
+  context.setReceiveTimeout(settings.orderReceiveTimeout)
 
   def updateState(event: Event): Unit = event match {
     case OrderInitialized ⇒
@@ -55,7 +57,8 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
         log.debug(s"Order initialized {}", persistenceId)
         updateState(evt)
       }
-    case ReceiveTimeout ⇒ context stop self
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = StopOrder)
+    case StopOrder ⇒ context stop self
     case _ ⇒ sender() ! Status.Failure(UnknownOrderException("unknown order"))
   }
 
@@ -75,11 +78,13 @@ class Order(maxOrderPrice: Double) extends PersistentActor with SettingsActor wi
         sender() ! Status.Success(())
         updateState (event)
       }
-    case ReceiveTimeout ⇒ // ignore
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = StopOrder)
+    case StopOrder ⇒ context stop self
   }
 
   def submitted: Receive = {
-    case ReceiveTimeout ⇒ // ignore
+    case ReceiveTimeout ⇒ context.parent ! Passivate(stopMessage = StopOrder)
+    case StopOrder ⇒ context stop self
     case msg ⇒
       log.error("Order is completed. Will not process: {}", msg)
       sender() ! Status.Failure(OrderIsSubmittedException(orderId))
