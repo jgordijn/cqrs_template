@@ -72,15 +72,17 @@ class MultiNodeSample extends MultiNodeSpec(MultiNodeSampleConfig)
   }
 
   def startSharding(): Unit = {
-    system.actorOf(
-      ClusterSingletonManager.props(Orders.props, "orders", PoisonPill, None),
-      "singleton")
 
-    val orderRegion = ClusterSharding(system).start(
+    val orderRegion: ActorRef = ClusterSharding(system).start(
       typeName = Order.shardName,
       entryProps = Some(Order.props(100)),
       idExtractor = OrderCommandHandler.idExtractor,
       shardResolver = OrderCommandHandler.shardResolver)
+
+    system.actorOf(
+      ClusterSingletonManager.props(Orders.props(orderRegion), "orders", PoisonPill, None),
+      "singleton")
+
   }
   def join(from: RoleName, to: RoleName): Unit = {
     runOn(from) {
